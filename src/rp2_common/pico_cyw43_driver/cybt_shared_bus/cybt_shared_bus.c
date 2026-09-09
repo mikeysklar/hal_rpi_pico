@@ -202,7 +202,15 @@ static cybt_result_t cybt_hci_write_buf(const uint8_t *p_data, uint32_t length) 
 
     // total length including header
     length = ROUNDUP(length, 4);
-    cybt_get_bt_buf_index(&fw_membuf_info);
+    // If the ring indices could not be read sanely, do not compute a write
+    // from them: with a garbage host2bt_in_val the wrap-around split below
+    // yields a multi-megabyte first_write_len and the backplane copy reads
+    // straight off the end of SRAM (bus fault). Fail the packet instead; the
+    // host reports the command as failed and the caller can retry.
+    if (cybt_get_bt_buf_index(&fw_membuf_info) != CYBT_SUCCESS) {
+        cybt_error("cybt_hci_write_buf: ring index unreadable, packet dropped\n");
+        return CYBT_ERR_HCI_WRITE_FAILED;
+    }
     uint32_t buf_space = CIRC_BUF_SPACE(fw_membuf_info.host2bt_in_val, fw_membuf_info.host2bt_out_val);
     assert(length <= buf_space); // queue full?
     if (length > buf_space) {
@@ -256,7 +264,12 @@ static cybt_result_t cybt_hci_read(uint8_t *p_data, uint32_t *p_length) {
 
     uint32_t read_len = ROUNDUP(*p_length, 4);
 
-    cybt_get_bt_buf_index(&fw_membuf_info);
+    if (cybt_get_bt_buf_index(&fw_membuf_info) != CYBT_SUCCESS) {
+        // Same protection as the write side: garbage indices would size the
+        // read from the ring, not the caller's buffer.
+        *p_length = 0;
+        return CYBT_ERR_HCI_READ_FAILED;
+    }
     fw_b2h_buf_count = CIRC_BUF_CNT(fw_membuf_info.bt2host_in_val,
                                     fw_membuf_info.bt2host_out_val);
     cybt_debug("cybt_hci_read: bt2host_in_val=%lu bt2host_out_val=%lu fw_b2h_buf_count=%ld\n",
@@ -347,10 +360,13 @@ int cyw43_btbus_write(uint8_t *buf, uint32_t size) {
     cybt_debug("cyw43_btbus_write: %d\n", cmd_len);
     DUMP_BYTES(buf, size); // dump header and data
 
-    cybt_hci_write_buf(buf, size);
+    // Returned as a cybt_result_t (CYBT_SUCCESS is 0), which is what the
+    // shared-bus HCI driver maps to an errno; swallowing it here made a
+    // dropped packet look like a sent one.
+    cybt_result_t ret = cybt_hci_write_buf(buf, size);
     cybt_bus_release();
 
-    return 0;
+    return (int) ret;
 }
 
 static bool cybt_hci_read_packet(uint8_t *buf, uint32_t max_buf_size, uint32_t *size) {
