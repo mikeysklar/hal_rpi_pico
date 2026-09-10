@@ -144,7 +144,6 @@ int cyw43_btbus_init(cyw43_ll_t *self) {
 
     cybt_debug("// cybt_wait_bt_ready\n");
     ret = cybt_wait_bt_ready(BTSDIO_FW_READY_POLLING_RETRY_COUNT);
-    assert(ret == CYBT_SUCCESS);
     if (CYBT_SUCCESS == ret) {
         cybt_debug("hci_open(): FW download successfully\n");
     } else {
@@ -153,13 +152,13 @@ int cyw43_btbus_init(cyw43_ll_t *self) {
     }
 
     ret = cybt_init_buffer();
-    assert(ret == 0);
     if (ret != 0) {
+        cybt_error("hci_open(): cybt_init_buffer failed (0x%x)\n", ret);
         return ret;
     }
     ret = cybt_wait_bt_awake(BTSDIO_FW_AWAKE_POLLING_RETRY_COUNT);
-    assert(ret == 0);
     if (ret != 0) {
+        cybt_error("hci_open(): controller never reported awake (0x%x)\n", ret);
         return ret;
     }
 

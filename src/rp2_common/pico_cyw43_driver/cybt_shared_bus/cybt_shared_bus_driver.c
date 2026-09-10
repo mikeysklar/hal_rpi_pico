@@ -588,7 +588,10 @@ static cybt_result_t cybt_mem_write(uint32_t mem_addr, const uint8_t *p_data, ui
         if ((mem_addr & 0xFFF) + transfer_size > 0x1000) {
             transfer_size = 0x1000 - (mem_addr & 0xFFF);
         }
-        cyw43_ll_write_backplane_mem(cyw43_ll, mem_addr, transfer_size, p_data);
+        if (cyw43_ll_write_backplane_mem(cyw43_ll, mem_addr, transfer_size, p_data) != 0) {
+            cybt_error("cybt_mem_write: backplane write at 0x%08lx failed\n", mem_addr);
+            return CYBT_ERR_HCI_WRITE_FAILED;
+        }
         cybt_debug("  write_mem addr 0x%08lx len %ld\n", mem_addr, transfer_size);
         DUMP_BYTES(p_data, transfer_size);
         data_len -= transfer_size;
@@ -606,7 +609,10 @@ static cybt_result_t cybt_mem_read(uint32_t mem_addr, uint8_t *p_data, uint32_t 
         if ((mem_addr & 0xFFF) + transfer_size > 0x1000) {
             transfer_size = 0x1000 - (mem_addr & 0xFFF);
         }
-        cyw43_ll_read_backplane_mem(cyw43_ll, mem_addr, transfer_size, p_data);
+        if (cyw43_ll_read_backplane_mem(cyw43_ll, mem_addr, transfer_size, p_data) != 0) {
+            cybt_error("cybt_mem_read: backplane read at 0x%08lx failed\n", mem_addr);
+            return CYBT_ERR_HCI_READ_FAILED;
+        }
         cybt_debug("  read_mem addr 0x%08lx len %ld\n", mem_addr, transfer_size);
         DUMP_BYTES(p_data, transfer_size);
         data_len -= transfer_size;
