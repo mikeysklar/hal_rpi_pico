@@ -108,38 +108,45 @@ int cyw43_btbus_init(cyw43_ll_t *self) {
 
     cybt_sharedbus_driver_init(self);
 
-    ret = cybt_fw_download_prepare(&p_write_buf, &p_hex_buf);
-    if (CYBT_SUCCESS != ret) {
-        cybt_error("Could not allocate memory\n");
-        return ret;
-    }
+    /* A previous open may have loaded patch RAM before failing a later
+     * startup step. Do not download over firmware that is already running.
+     * Read the hardware state on every attempt so a controller reset still
+     * causes the firmware to be downloaded again.
+     */
+    if (!cybt_ready()) {
+        ret = cybt_fw_download_prepare(&p_write_buf, &p_hex_buf);
+        if (CYBT_SUCCESS != ret) {
+            cybt_error("Could not allocate memory\n");
+            return ret;
+        }
 
-    cybt_debug("cybt_fw_download\n");
-    const uint8_t *fw_data_buf;
-    uint32_t fw_data_len;
+        cybt_debug("cybt_fw_download\n");
+        const uint8_t *fw_data_buf;
+        uint32_t fw_data_len;
 #if CYW43_USE_HEX_BTFW
-    cybt_error("CYW43_USE_HEX_BTFW is true\n");
+        cybt_error("CYW43_USE_HEX_BTFW is true\n");
 #ifndef NDEBUG
-    cybt_info("BT FW download, version = %s\n", brcm_patch_version);
+        cybt_info("BT FW download, version = %s\n", brcm_patch_version);
 #endif
-    fw_data_len = brcm_patch_ram_length;
-    fw_data_buf = brcm_patchram_buf;
+        fw_data_len = brcm_patch_ram_length;
+        fw_data_buf = brcm_patchram_buf;
 #else
-    fw_data_len = cyw43_btfw_43439_len;
-    fw_data_buf = cyw43_btfw_43439;
+        fw_data_len = cyw43_btfw_43439_len;
+        fw_data_buf = cyw43_btfw_43439;
 #endif
-    ret = cybt_fw_download(fw_data_buf,
-                           fw_data_len,
-                           p_write_buf,
-                           p_hex_buf
-    );
+        ret = cybt_fw_download(fw_data_buf,
+                               fw_data_len,
+                               p_write_buf,
+                               p_hex_buf
+        );
 
-    cybt_debug("cybt_fw_download_finish\n");
-    cybt_fw_download_finish(p_write_buf, p_hex_buf);
+        cybt_debug("cybt_fw_download_finish\n");
+        cybt_fw_download_finish(p_write_buf, p_hex_buf);
 
-    if (CYBT_SUCCESS != ret) {
-        cybt_error("hci_open(): FW download failed (0x%x)\n", ret);
-        return CYBT_ERR_HCI_INIT_FAILED;
+        if (CYBT_SUCCESS != ret) {
+            cybt_error("hci_open(): FW download failed (0x%x)\n", ret);
+            return CYBT_ERR_HCI_INIT_FAILED;
+        }
     }
 
     cybt_debug("// cybt_wait_bt_ready\n");
